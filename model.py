@@ -74,13 +74,14 @@ def load_data():
 def build_model(X_train, y_train):
     model = Sequential()
 
-    # Crop the image to remove the scenery and hood of the car
-#    model.add(Lambda(lambda x: x[70:140,:,:], input_shape=X_train.shape[1:]))
+    # Input data is 160x320x3
 
     # Normalize the images to the rance -1 to +1
     model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=X_train.shape[1:]))
 
+    # Crop the image to remove the scenery and hood of the car
     model.add(Cropping2D(cropping=((70,25),(0,0))))
+
     model.add(Convolution2D(24, 5, 5, subsample=(2,2), activation='relu'))
     model.add(Convolution2D(36, 5, 5, subsample=(2,2), activation='relu'))
     model.add(Convolution2D(48, 5, 5, subsample=(2,2), activation='relu'))
@@ -104,7 +105,7 @@ def main():
     print('Done.')
     print('X shape: {}'.format(X_train.shape))
     print('y shape: {}'.format(y_train.shape))
-    print('y summary: {}'.format(pd.Series(y_train).describe()))
+    print('y summary: \n{}'.format(pd.Series(y_train).describe()))
 
     print('Building & training model...')
     model = build_model(X_train, y_train)
