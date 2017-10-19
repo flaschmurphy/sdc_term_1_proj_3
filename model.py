@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from keras.models import Sequential
-from keras.layers import Flatten, Dense, Lambda
+from keras.layers import Flatten, Dense, Lambda, Dropout
 from keras.layers.convolutional import Convolution2D, Cropping2D
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
@@ -44,7 +44,7 @@ def split_data(csvdata):
 
 def data_generator(X, y, batch_size, correction_factor, training=True):
 
-    # Note that the length of the data returned will actually be 3x the batch_size
+    # Note that the length of the data returned will actually be 6x the batch_size
     # since it includes center, left and right images (=3x) plus a second copy of 
     # each of the 3 images, but flipped (data augmentation). Therefore if the batch 
     # size is 128, the data length returned will be 768.
@@ -90,7 +90,7 @@ def data_generator(X, y, batch_size, correction_factor, training=True):
             yield shuffle(np.array(images), np.array(measurements))
 
 
-def build_model():
+def build_model(drop_prob):
     model = Sequential()
     # Normalize the images to the rance -1 to +1
     model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=(160,320,3)))
@@ -98,6 +98,7 @@ def build_model():
     model.add(Cropping2D(cropping=((70,25),(0,0))))
 
     model.add(Convolution2D(24, 5, 5, subsample=(2,2), activation='relu'))
+    model.add(Dropout(drop_prob))
     model.add(Convolution2D(36, 5, 5, subsample=(2,2), activation='relu'))
     model.add(Convolution2D(48, 5, 5, subsample=(2,2), activation='relu'))
     model.add(Convolution2D(64, 3, 3, activation='relu'))
@@ -111,7 +112,7 @@ def build_model():
     return model
 
 
-def main(epochs, batch_size, correction_factor):
+def main(epochs, batch_size, correction_factor, drop_prob):
     print('Loading data...')
     csvdata = load_data()
     X_train, X_valid, y_train, y_valid = split_data(csvdata)
@@ -119,7 +120,7 @@ def main(epochs, batch_size, correction_factor):
     valid_gen = data_generator(X_valid, y_valid, batch_size, correction_factor, training=False)
 
     print('Building & training model...')
-    model = build_model()
+    model = build_model(drop_prob)
 
     model.compile(optimizer='adam', loss='mse')
 
@@ -151,8 +152,10 @@ def plot_hist(history_pickle_file=TRAINING_HIST_FILE):
 
 
 if __name__ == '__main__':
-    epochs = 20 
+    epochs = 25 
     correction_factor= 0.425
     batch_size = 128
-    main(epochs, batch_size, correction_factor)
+    drop_prob = 0.1
+
+    main(epochs, batch_size, correction_factor, drop_prob)
 
