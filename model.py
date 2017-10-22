@@ -5,12 +5,14 @@ import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 from argparse import ArgumentParser
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from keras.models import Sequential
-from keras.layers import Flatten, Dense, Lambda, Dropout
+from keras.layers import Flatten, Dense, Lambda, Dropout, Reshape
 from keras.layers.convolutional import Convolution2D, Cropping2D
+from keras.utils import plot_model
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 
@@ -98,20 +100,37 @@ def data_generator(X, y, batch_size, correction_factor, training=True):
             yield shuffle(np.array(images), np.array(measurements))
 
 
+def to_gray(X):
+    return  X[:, :, :, 0] * 0.299 + X[:, :, :, 1] * 0.587 + X[:, :, :, 2] * 0.114
+
+def crop(X, top=60, bottom=25):
+    if type(X) == np.ndarray:
+        height = X.shape[1]
+    else:
+        height = X.get_shape()[1]
+    return X[:, top:height-bottom, :]
+
+def preprocess(X):
+    X = to_gray(X)
+    X = crop(X)
+    return X
+
 def build_model(drop_prob):
     model = Sequential()
 
     # Normalize the images to the rance -1 to +1
     model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=(160,320,3)))
-    # Crop the image to remove the scenery and hood of the car
-    model.add(Cropping2D(cropping=((70,25),(0,0))))
 
-    model.add(Convolution2D(24, 5, 5, subsample=(2,2), activation='relu'))
+    model.add(Lambda(preprocess))
+
+    model.add(Reshape((75, 320, 1)))
+ 
+    model.add(Convolution2D(24, (5, 5), strides=(2,2), activation='relu'))
     model.add(Dropout(drop_prob))
-    model.add(Convolution2D(36, 5, 5, subsample=(2,2), activation='relu'))
-    model.add(Convolution2D(48, 5, 5, subsample=(2,2), activation='relu'))
-    model.add(Convolution2D(64, 3, 3, activation='relu'))
-    model.add(Convolution2D(64, 3, 3, activation='relu'))
+    model.add(Convolution2D(36, (5, 5), strides=(2,2), activation='relu'))
+    model.add(Convolution2D(48, (5, 5), strides=(2,2), activation='relu'))
+    model.add(Convolution2D(64, (3, 3), activation='relu'))
+    model.add(Convolution2D(64, (3, 3), activation='relu'))
     model.add(Flatten())
     model.add(Dense(100))
     model.add(Dense(50))
@@ -137,6 +156,80 @@ def parse_args():
     return parser.parse_args()
 
 
+def explore_images(csvdata):
+    # Choose a random number as the index for our sample image
+    idx = np.random.randint(csvdata.shape[0]+1)
+
+    # Load a center image and it's corresponding left and right images
+    to_rgb = lambda img: cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img_ctr = to_rgb(cv2.imread(csvdata[idx][0]))
+    img_lft = to_rgb(cv2.imread(csvdata[idx][1]))
+    img_rht = to_rgb(cv2.imread(csvdata[idx][2]))
+    images = np.array([img_lft, img_ctr, img_rht])
+    
+    # Convert to grayscale
+    images_gray = to_gray(images)
+    
+    # Crop
+    images_crop = crop(images_gray)
+    
+    # Plot 3 original images in 1st row
+    plt.subplot(331)
+    plt.imshow(images[0])
+    plt.title('Original Left')
+    
+    plt.subplot(332)
+    plt.imshow(images[1])
+    plt.title('Original Center')
+    
+    plt.subplot(333)
+    plt.imshow(images[2])
+    plt.title('Original Right')
+    
+    # Plot 3 gray images in the 3nd row
+    plt.subplot(334)
+    plt.imshow(images_gray[0], cmap='gray')
+    plt.title('Gray Left')
+    
+    plt.subplot(335)
+    plt.imshow(images_gray[1], cmap='gray')
+    plt.title('Gray Center')
+    
+    plt.subplot(336)
+    plt.imshow(images_gray[2], cmap='gray')
+    plt.title('Gray Right')
+
+    # Plot 3 cropped images in the 2nd row
+    plt.subplot(337)
+    plt.imshow(images_crop[0], cmap='gray')
+    plt.title('Cropped Left')
+    
+    plt.subplot(338)
+    plt.imshow(images_crop[1], cmap='gray')
+    plt.title('Cropped Center')
+    
+    plt.subplot(339)
+    plt.imshow(images_crop[2], cmap='gray')
+    plt.title('Cropped Right')
+    
+    # Show the plot
+    plt.tight_layout()
+    plt.show()
+    
+
+
+def plot_history(history_pickle_file=TRAINING_HIST_FILE):
+    """Plot the training and validation loss for each epoch"""
+    history = pickle.load(open(history_pickle_file, 'rb'))
+    plt.plot(history['loss'])
+    plt.plot(history['val_loss'])
+    plt.title('Training vs Validation Loss')
+    plt.ylabel('mean squared error loss')
+    plt.xlabel('epoch')
+    plt.legend(['training set', 'validation set'], loc='upper right')
+    plt.show()
+
+
 def main(epochs, batch_size, correction_factor, drop_prob):
     args = parse_args()
 
@@ -152,6 +245,8 @@ def main(epochs, batch_size, correction_factor, drop_prob):
 
     print('Building model...')
     model = build_model(drop_prob)
+    print('Plotting model to png file...')
+    plot_model(model, to_file='model.png', show_shapes=True)
 
     if not args.analyze_only:
         print('Compiling and training model...')
@@ -172,19 +267,9 @@ def main(epochs, batch_size, correction_factor, drop_prob):
         print('Training history was saved as {}'.format(TRAINING_HIST_FILE))
 
     if args.local:
+        explore_images(csvdata)
         plot_history()
 
-
-def plot_history(history_pickle_file=TRAINING_HIST_FILE):
-    """Plot the training and validation loss for each epoch"""
-    history = pickle.load(open(history_pickle_file, 'rb'))
-    plt.plot(history['loss'])
-    plt.plot(history['val_loss'])
-    plt.title('Training vs Validation Loss')
-    plt.ylabel('mean squared error loss')
-    plt.xlabel('epoch')
-    plt.legend(['training set', 'validation set'], loc='upper right')
-    plt.show()
 
 
 if __name__ == '__main__':
