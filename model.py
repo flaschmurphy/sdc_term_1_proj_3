@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from argparse import ArgumentParser
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from keras.models import Sequential
@@ -21,19 +22,26 @@ MODEL_SAVE_FILE = './model.h5'
 TRAINING_HIST_FILE = './model_training_hist.pkle'
 
 
-def load_data(correction_factor=0.35):
-    csvdata, images, measurements = [], [], []
+def load_data():
+    colnames = ['center_img', 'left_img', 'right_img', 'steering', 'throttle', 'break', 'speed']
+    csvdata = pd.read_csv(os.path.join(TRAINING_CSV_PATH, TRAINING_CSV_FILE), names = colnames)
+    remap = lambda n: os.path.join(TRAINING_IMAGE_PATH, os.path.basename(n))
+    csvdata.iloc[:,0:3] = csvdata.iloc[:,0:3].applymap(remap)
+    return csvdata
 
-    with open(os.path.join(TRAINING_CSV_PATH, TRAINING_CSV_FILE)) as f:
-        reader = csv.reader(f)
-        remap = lambda n: os.path.join(TRAINING_IMAGE_PATH, os.path.basename(line[n]))
-        for line in reader:
-            # Translate the paths in the csv data to local paths
-            line[0] = remap(0)
-            line[1] = remap(1)
-            line[2] = remap(2)
-            csvdata.append(line)
-    return np.array(csvdata)
+
+def explore_csv(csvdata):
+    print()
+    print('Summary of data:\n{}'.format(csvdata.describe()))
+    print("""
+  ==> The steering angles are normalized in the range -1 to +1
+  ==> Most steering angles are less than zero, meaning the data is biased
+      to left turns. This is expected given that the track is known to be
+      dominated by left turns
+  ==> The steering data is quite clustered around zero, see the 25% and 50% 
+      quartiles
+  """)
+    print()
 
 
 def split_data(csvdata):
@@ -92,6 +100,7 @@ def data_generator(X, y, batch_size, correction_factor, training=True):
 
 def build_model(drop_prob):
     model = Sequential()
+
     # Normalize the images to the rance -1 to +1
     model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=(160,320,3)))
     # Crop the image to remove the scenery and hood of the car
@@ -109,42 +118,69 @@ def build_model(drop_prob):
     model.add(Dense(10))
     model.add(Dense(1))
 
+    print()
+    print(model.summary())
+    print()
+
     return model
 
 
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('-l', '--local', action='store_true', default=False, dest='local', \
+            help='Enable if running traing on a local machine to see plots of eg. images and training loss')
+
+    parser.add_argument('-a', '--analyze_only', action='store_true', default=False, dest='analyze_only', \
+            help="""Enable to skip training and only perform the data analytics part. Expects to find the training 
+            history data locally in a pickle file called {} """.format(TRAINING_HIST_FILE))
+
+    return parser.parse_args()
+
+
 def main(epochs, batch_size, correction_factor, drop_prob):
+    args = parse_args()
+
     print('Loading data...')
     csvdata = load_data()
+    explore_csv(csvdata)
+
+    csvdata = np.array(csvdata)
+
     X_train, X_valid, y_train, y_valid = split_data(csvdata)
     train_gen = data_generator(X_train, y_train, batch_size, correction_factor)
     valid_gen = data_generator(X_valid, y_valid, batch_size, correction_factor, training=False)
 
-    print('Building & training model...')
+    print('Building model...')
     model = build_model(drop_prob)
 
-    model.compile(optimizer='adam', loss='mse')
+    if not args.analyze_only:
+        print('Compiling and training model...')
+        model.compile(optimizer='adam', loss='mse')
 
-    history_object = model.fit_generator(\
-            train_gen, \
-            samples_per_epoch=batch_size*6, \
-            validation_data=valid_gen, \
-            nb_val_samples=len(y_train), \
-            nb_epoch=epochs, verbose=1)
+        history_object = model.fit_generator(\
+                train_gen, \
+                samples_per_epoch=batch_size*6, \
+                validation_data=valid_gen, \
+                nb_val_samples=len(y_train), \
+                nb_epoch=epochs, verbose=1)
 
-    model.save(MODEL_SAVE_FILE)
-    print('Model was saved as {}'.format(MODEL_SAVE_FILE))
+        model.save(MODEL_SAVE_FILE)
+        print('Model was saved as {}'.format(MODEL_SAVE_FILE))
 
-    with open(TRAINING_HIST_FILE, 'wb') as f:
-        pickle.dump(history_object.history, f)
-    print('Training history was saved as {}'.format(TRAINING_HIST_FILE))
+        with open(TRAINING_HIST_FILE, 'wb') as f:
+            pickle.dump(history_object.history, f)
+        print('Training history was saved as {}'.format(TRAINING_HIST_FILE))
+
+    if args.local:
+        plot_history()
 
 
-def plot_hist(history_pickle_file=TRAINING_HIST_FILE):
-    """plot the training and validation loss for each epoch"""
+def plot_history(history_pickle_file=TRAINING_HIST_FILE):
+    """Plot the training and validation loss for each epoch"""
     history = pickle.load(open(history_pickle_file, 'rb'))
     plt.plot(history['loss'])
     plt.plot(history['val_loss'])
-    plt.title('model mean squared error loss')
+    plt.title('Training vs Validation Loss')
     plt.ylabel('mean squared error loss')
     plt.xlabel('epoch')
     plt.legend(['training set', 'validation set'], loc='upper right')
@@ -155,7 +191,7 @@ if __name__ == '__main__':
     epochs = 25 
     correction_factor= 0.425
     batch_size = 128
-    drop_prob = 0.1
+    drop_prob = 0.25
 
     main(epochs, batch_size, correction_factor, drop_prob)
 
