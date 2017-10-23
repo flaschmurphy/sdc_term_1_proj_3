@@ -12,7 +12,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from keras.models import Sequential
 from keras.layers import Flatten, Dense, Lambda, Dropout, Reshape
 from keras.layers.convolutional import Convolution2D, Cropping2D
-from keras.utils import plot_model
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 
@@ -97,40 +96,45 @@ def data_generator(X, y, batch_size, correction_factor, training=True):
                     images.append(cv2.flip(image_r, 1))
                     measurements.append(correction_factor)
 
+            #images = to_gray(np.array(images))
+
             yield shuffle(np.array(images), np.array(measurements))
 
 
 def to_gray(X):
-    return  X[:, :, :, 0] * 0.299 + X[:, :, :, 1] * 0.587 + X[:, :, :, 2] * 0.114
+    X =  X[:, :, :, 0] * 0.299 + X[:, :, :, 1] * 0.587 + X[:, :, :, 2] * 0.114
+    return np.reshape(X, X.shape + (1, ))
 
-def crop(X, top=60, bottom=25):
-    if type(X) == np.ndarray:
-        height = X.shape[1]
-    else:
-        height = X.get_shape()[1]
-    return X[:, top:height-bottom, :]
 
-def preprocess(X):
-    X = to_gray(X)
-    X = crop(X)
-    return X
+def crop(X, crop_top=60, crop_bottom=25):
+    height = X.shape[1]
+    return X[:, top:height-bottom, :, :]
 
-def build_model(drop_prob):
+def build_model(drop_prob, crop_top=60, crop_bottom=25):
     model = Sequential()
 
-    # Normalize the images to the rance -1 to +1
-    model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=(160,320,3)))
+    # It's easier to preprocess here in the model while training rather than 
+    # use the crop() method defined above (which is only used for visualization)
+    # Trying to use the to_gray() and crop() methods above in the model was leading
+    # to odd errors coming from Keras.
 
-    model.add(Lambda(preprocess))
+    # Grayscale
+    #model.add(Lambda(lambda x: x[:, :, 0] * 0.299 + x[:, :, 1] * 0.587 + x[:, :, 2] * 0.114, \
+    #        input_shape=(160,320,3), name='grayscale'))
 
-    model.add(Reshape((75, 320, 1)))
+    # Normalize
+    #model.add(Lambda(lambda x: x/255.0 - 0.5, name='normalize', input_shape=(160,320,1)))
+    model.add(Lambda(lambda x: x/255.0 - 0.5, name='normalize', input_shape=(160,320,3)))
+
+    # Crop
+    model.add(Cropping2D(cropping=((crop_top, crop_bottom), (0, 0))))
  
-    model.add(Convolution2D(24, (5, 5), strides=(2,2), activation='relu'))
+    model.add(Convolution2D(24, 5, 5, subsample=(2,2), activation='relu'))
     model.add(Dropout(drop_prob))
-    model.add(Convolution2D(36, (5, 5), strides=(2,2), activation='relu'))
-    model.add(Convolution2D(48, (5, 5), strides=(2,2), activation='relu'))
-    model.add(Convolution2D(64, (3, 3), activation='relu'))
-    model.add(Convolution2D(64, (3, 3), activation='relu'))
+    model.add(Convolution2D(36, 5, 5, subsample=(2,2), activation='relu'))
+    model.add(Convolution2D(48, 5, 5, subsample=(2,2), activation='relu'))
+    model.add(Convolution2D(64, 3, 3, activation='relu'))
+    model.add(Convolution2D(64, 3, 3, activation='relu'))
     model.add(Flatten())
     model.add(Dense(100))
     model.add(Dense(50))
@@ -215,7 +219,6 @@ def explore_images(csvdata):
     # Show the plot
     plt.tight_layout()
     plt.show()
-    
 
 
 def plot_history(history_pickle_file=TRAINING_HIST_FILE):
@@ -245,8 +248,6 @@ def main(epochs, batch_size, correction_factor, drop_prob):
 
     print('Building model...')
     model = build_model(drop_prob)
-    print('Plotting model to png file...')
-    plot_model(model, to_file='model.png', show_shapes=True)
 
     if not args.analyze_only:
         print('Compiling and training model...')
