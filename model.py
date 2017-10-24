@@ -10,18 +10,16 @@ from argparse import ArgumentParser
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from keras.models import Sequential
-from keras.layers import Flatten, Dense, Lambda, Dropout, Reshape
+from keras.layers import Flatten, Dense, Lambda, Dropout
 from keras.layers.convolutional import Convolution2D, Cropping2D
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 
-
-TRAINING_CSV_PATH = '../data/my_training_data'
+TRAINING_CSV_PATH = '../data/newdata/main'
 TRAINING_CSV_FILE = 'driving_log.csv'
 TRAINING_IMAGE_PATH = os.path.join(TRAINING_CSV_PATH, 'IMG')
 MODEL_SAVE_FILE = './model.h5'
 TRAINING_HIST_FILE = './model_training_hist.pkle'
-
 
 def load_data():
     colnames = ['center_img', 'left_img', 'right_img', 'steering', 'throttle', 'break', 'speed']
@@ -38,7 +36,7 @@ def explore_csv(csvdata):
   ==> The steering angles are normalized in the range -1 to +1
   ==> Most steering angles are less than zero, meaning the data is biased
       to left turns. This is expected given that the track is known to be
-      dominated by left turns
+      dominated by left turns.
   ==> The steering data is quite clustered around zero, see the 25% and 50% 
       quartiles
   """)
@@ -96,39 +94,23 @@ def data_generator(X, y, batch_size, correction_factor, training=True):
                     images.append(cv2.flip(image_r, 1))
                     measurements.append(correction_factor)
 
-            #images = to_gray(np.array(images))
-
             yield shuffle(np.array(images), np.array(measurements))
-
-
-def to_gray(X):
-    X =  X[:, :, :, 0] * 0.299 + X[:, :, :, 1] * 0.587 + X[:, :, :, 2] * 0.114
-    return np.reshape(X, X.shape + (1, ))
 
 
 def crop(X, crop_top=60, crop_bottom=25):
     height = X.shape[1]
-    return X[:, top:height-bottom, :, :]
+    return X[:, crop_top:height-crop_bottom, :, :]
 
-def build_model(drop_prob, crop_top=60, crop_bottom=25):
+
+def build_model(drop_prob=0.5, crop_top=60, crop_bottom=25):
     model = Sequential()
 
-    # It's easier to preprocess here in the model while training rather than 
-    # use the crop() method defined above (which is only used for visualization)
-    # Trying to use the to_gray() and crop() methods above in the model was leading
-    # to odd errors coming from Keras.
+    # Normalize the images to the rance -1 to +1
+    model.add(Lambda(lambda x: x/255.0 - 0.5, input_shape=(160,320,3), name='normalize'))
 
-    # Grayscale
-    #model.add(Lambda(lambda x: x[:, :, 0] * 0.299 + x[:, :, 1] * 0.587 + x[:, :, 2] * 0.114, \
-    #        input_shape=(160,320,3), name='grayscale'))
+    # Crop the image to remove the scenery and hood of the car
+    model.add(Cropping2D(cropping=((crop_top,crop_bottom),(0,0)), name='crop'))
 
-    # Normalize
-    #model.add(Lambda(lambda x: x/255.0 - 0.5, name='normalize', input_shape=(160,320,1)))
-    model.add(Lambda(lambda x: x/255.0 - 0.5, name='normalize', input_shape=(160,320,3)))
-
-    # Crop
-    model.add(Cropping2D(cropping=((crop_top, crop_bottom), (0, 0))))
- 
     model.add(Convolution2D(24, 5, 5, subsample=(2,2), activation='relu'))
     model.add(Dropout(drop_prob))
     model.add(Convolution2D(36, 5, 5, subsample=(2,2), activation='relu'))
@@ -170,12 +152,9 @@ def explore_images(csvdata):
     img_lft = to_rgb(cv2.imread(csvdata[idx][1]))
     img_rht = to_rgb(cv2.imread(csvdata[idx][2]))
     images = np.array([img_lft, img_ctr, img_rht])
-    
-    # Convert to grayscale
-    images_gray = to_gray(images)
-    
+
     # Crop
-    images_crop = crop(images_gray)
+    images_crop = crop(images)
     
     # Plot 3 original images in 1st row
     plt.subplot(331)
@@ -189,40 +168,39 @@ def explore_images(csvdata):
     plt.subplot(333)
     plt.imshow(images[2])
     plt.title('Original Right')
-    
-    # Plot 3 gray images in the 3nd row
-    plt.subplot(334)
-    plt.imshow(images_gray[0], cmap='gray')
-    plt.title('Gray Left')
-    
-    plt.subplot(335)
-    plt.imshow(images_gray[1], cmap='gray')
-    plt.title('Gray Center')
-    
-    plt.subplot(336)
-    plt.imshow(images_gray[2], cmap='gray')
-    plt.title('Gray Right')
 
     # Plot 3 cropped images in the 2nd row
-    plt.subplot(337)
-    plt.imshow(images_crop[0], cmap='gray')
+    plt.subplot(334)
+    plt.imshow(images_crop[0])
     plt.title('Cropped Left')
     
-    plt.subplot(338)
-    plt.imshow(images_crop[1], cmap='gray')
+    plt.subplot(335)
+    plt.imshow(images_crop[1])
     plt.title('Cropped Center')
     
-    plt.subplot(339)
-    plt.imshow(images_crop[2], cmap='gray')
+    plt.subplot(336)
+    plt.imshow(images_crop[2])
     plt.title('Cropped Right')
     
+    # Plot 3 flipped images in the 3rd row
+    plt.subplot(337)
+    plt.imshow(cv2.flip(images_crop[0], 1))
+    plt.title('Fliped Left')
+    
+    plt.subplot(338)
+    plt.imshow(cv2.flip(images_crop[1], 1))
+    plt.title('Flipped Center')
+    
+    plt.subplot(339)
+    plt.imshow(cv2.flip(images_crop[2], 1))
+    plt.title('Flipped Right')
+
     # Show the plot
     plt.tight_layout()
     plt.show()
 
 
 def plot_history(history_pickle_file=TRAINING_HIST_FILE):
-    """Plot the training and validation loss for each epoch"""
     history = pickle.load(open(history_pickle_file, 'rb'))
     plt.plot(history['loss'])
     plt.plot(history['val_loss'])
@@ -233,7 +211,7 @@ def plot_history(history_pickle_file=TRAINING_HIST_FILE):
     plt.show()
 
 
-def main(epochs, batch_size, correction_factor, drop_prob):
+def main(epochs, batch_size, correction_factor):
     args = parse_args()
 
     print('Loading data...')
@@ -247,8 +225,7 @@ def main(epochs, batch_size, correction_factor, drop_prob):
     valid_gen = data_generator(X_valid, y_valid, batch_size, correction_factor, training=False)
 
     print('Building model...')
-    model = build_model(drop_prob)
-
+    model = build_model()
     if not args.analyze_only:
         print('Compiling and training model...')
         model.compile(optimizer='adam', loss='mse')
@@ -272,12 +249,9 @@ def main(epochs, batch_size, correction_factor, drop_prob):
         plot_history()
 
 
-
 if __name__ == '__main__':
-    epochs = 25 
-    correction_factor= 0.425
+    epochs = 20
+    correction_factor= 0.3
     batch_size = 128
-    drop_prob = 0.25
-
-    main(epochs, batch_size, correction_factor, drop_prob)
+    main(epochs, batch_size, correction_factor)
 
