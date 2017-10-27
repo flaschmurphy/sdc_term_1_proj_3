@@ -1,3 +1,11 @@
+#
+# Udacity Self Driving Car Nanodegree
+#
+# Term 1, Project 3 -- Behavioral Cloning
+#
+# Author: Ciaran Murphy
+# Date: 27th Oct 2017
+#
 import os
 import csv
 import cv2
@@ -8,20 +16,25 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from argparse import ArgumentParser
 
+# Prevent uninteresting messages from tensorflow when launching
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from keras.models import Sequential
 from keras.layers import Flatten, Dense, Lambda, Dropout
 from keras.layers.convolutional import Convolution2D, Cropping2D
+from keras.callbacks import TensorBoard
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 
+# Global constants
 TRAINING_CSV_PATH = '../data/newdata/main'
 TRAINING_CSV_FILE = 'driving_log.csv'
 TRAINING_IMAGE_PATH = os.path.join(TRAINING_CSV_PATH, 'IMG')
 MODEL_SAVE_FILE = './model.h5'
-TRAINING_HIST_FILE = './model_training_hist.pkle'
+TRAINING_HIST_FILE = './train_hist.pkle'
+#
 
 def load_data():
+    """Loads data from disk using pandas"""
     colnames = ['center_img', 'left_img', 'right_img', 'steering', 'throttle', 'break', 'speed']
     csvdata = pd.read_csv(os.path.join(TRAINING_CSV_PATH, TRAINING_CSV_FILE), names = colnames)
     remap = lambda n: os.path.join(TRAINING_IMAGE_PATH, os.path.basename(n))
@@ -29,32 +42,23 @@ def load_data():
     return csvdata
 
 
-def explore_csv(csvdata):
-    print()
-    print('Summary of data:\n{}'.format(csvdata.describe()))
-    print("""
-  ==> The steering angles are normalized in the range -1 to +1
-  ==> Most steering angles are less than zero, meaning the data is biased
-      to left turns. This is expected given that the track is known to be
-      dominated by left turns.
-  ==> The steering data is quite clustered around zero, see the 25% and 50% 
-      quartiles
-  """)
-    print()
-
-
 def split_data(csvdata):
+    """Split data into training and validation sets using sklearn"""
     features = csvdata[:,0:3]
     labels = csvdata[:,3]
     return train_test_split(features, labels)
 
 
 def data_generator(X, y, batch_size, correction_factor, training=True):
+    """Python generator for supplying data to the training process. 
 
-    # Note that the length of the data returned will actually be 6x the batch_size
-    # since it includes center, left and right images (=3x) plus a second copy of 
-    # each of the 3 images, but flipped (data augmentation). Therefore if the batch 
-    # size is 128, the data length returned will be 768.
+    Note that the length of the data returned will be 6 times the batch_size.
+    This is because each line in the batch references center, left and right
+    images (=3x) plus a second copy of each of the 3 images, but flipped as
+    part of data augmentation.  Therefore if the batch size is 128, the data
+    length returned will be 768.  
+
+    """
 
     assert len(X) == len(y), "Required to have the same number of features and labels"
 
@@ -97,10 +101,6 @@ def data_generator(X, y, batch_size, correction_factor, training=True):
             yield shuffle(np.array(images), np.array(measurements))
 
 
-def crop(X, crop_top=60, crop_bottom=25):
-    height = X.shape[1]
-    return X[:, crop_top:height-crop_bottom, :, :]
-
 
 def build_model(drop_prob=0.5, crop_top=60, crop_bottom=25):
     model = Sequential()
@@ -130,19 +130,14 @@ def build_model(drop_prob=0.5, crop_top=60, crop_bottom=25):
     return model
 
 
-def parse_args():
-    parser = ArgumentParser()
-    parser.add_argument('-l', '--local', action='store_true', default=False, dest='local', \
-            help='Enable if running traing on a local machine to see plots of eg. images and training loss')
+def explore_images(csvdata, crop_top=60, crop_bottom=25):
+    """Creates and displays a plot of images showing the three stages of image processing used."""
 
-    parser.add_argument('-a', '--analyze_only', action='store_true', default=False, dest='analyze_only', \
-            help="""Enable to skip training and only perform the data analytics part. Expects to find the training 
-            history data locally in a pickle file called {} """.format(TRAINING_HIST_FILE))
+    def crop(X, top=crop_top, bottom=crop_bottom):
+        """Embeded utility function to perform cropping"""
+        height = X.shape[1]
+        return X[:, top:height-bottom, :, :]
 
-    return parser.parse_args()
-
-
-def explore_images(csvdata):
     # Choose a random number as the index for our sample image
     idx = np.random.randint(csvdata.shape[0]+1)
 
@@ -155,6 +150,8 @@ def explore_images(csvdata):
 
     # Crop
     images_crop = crop(images)
+
+    plt.figure(figsize=(20, 15))
     
     # Plot 3 original images in 1st row
     plt.subplot(331)
@@ -201,6 +198,9 @@ def explore_images(csvdata):
 
 
 def plot_history(history_pickle_file=TRAINING_HIST_FILE):
+    """Creates and displays a plot of the training vs validation data history."""
+
+    plt.figure(figsize=(16, 15))
     history = pickle.load(open(history_pickle_file, 'rb'))
     plt.plot(history['loss'])
     plt.plot(history['val_loss'])
@@ -211,12 +211,28 @@ def plot_history(history_pickle_file=TRAINING_HIST_FILE):
     plt.show()
 
 
+def plot_steering_angles(csvdata):
+    """Creates and displays a histogram of the steering angles observed in the data."""
+
+    plt.figure(figsize=(16, 15))
+    plt.hist(csvdata['steering'], bins=100)
+    plt.title('Steering angles in training data')
+    plt.show()
+
+
 def main(epochs, batch_size, correction_factor):
+    """This is the entry point into the script."""
+
     args = parse_args()
+    if not args.train:
+        print("\nNo training will be run. Call with '-t' to including training. See the help for more info.\n")
 
     print('Loading data...')
     csvdata = load_data()
-    explore_csv(csvdata)
+    print('Summary of data:\n{}\n'.format(csvdata.describe()))
+
+    if not args.train:
+        plot_steering_angles(csvdata)
 
     csvdata = np.array(csvdata)
 
@@ -226,16 +242,27 @@ def main(epochs, batch_size, correction_factor):
 
     print('Building model...')
     model = build_model()
-    if not args.analyze_only:
+    if args.train:
         print('Compiling and training model...')
         model.compile(optimizer='adam', loss='mse')
+
+        # The line below generate a TensorBoard callback that is then fed into
+        # the fit() method. The # result of this is that log data is collected
+        # during training which can be used to visualize # and if necessary
+        # debug the model training behavior. Unfortunately the project
+        # environment is # defaulted to Keras version 1.2.1 which is less
+        # feature-rich than the # newer v2 releases. Therefore there are some
+        # limitations to what # can be accomplished with this version of the
+        # callback.
+        tboard = TensorBoard(log_dir='./tboard')
 
         history_object = model.fit_generator(\
                 train_gen, \
                 samples_per_epoch=batch_size*6, \
                 validation_data=valid_gen, \
                 nb_val_samples=len(y_train), \
-                nb_epoch=epochs, verbose=1)
+                nb_epoch=epochs, verbose=1, \
+                callbacks=[tboard])
 
         model.save(MODEL_SAVE_FILE)
         print('Model was saved as {}'.format(MODEL_SAVE_FILE))
@@ -244,24 +271,28 @@ def main(epochs, batch_size, correction_factor):
             pickle.dump(history_object.history, f)
         print('Training history was saved as {}'.format(TRAINING_HIST_FILE))
 
-    if args.local:
+    else:
         explore_images(csvdata)
         plot_history()
 
-def plot_hist(history_pickle_file=TRAINING_HIST_FILE):
-    """plot the training and validation loss for each epoch"""
-    history = pickle.load(open(history_pickle_file, 'rb'))
-    plt.plot(history['loss'])
-    plt.plot(history['val_loss'])
-    plt.title('model mean squared error loss')
-    plt.ylabel('mean squared error loss')
-    plt.xlabel('epoch')
-    plt.legend(['training set', 'validation set'], loc='upper right')
-    plt.show()
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('-t', '--train', action='store_true', default=False, dest='train', \
+            help="""Enable to run training. If not set, assume data analytics
+            only. If running only analytics, there must be a pickle file in the
+            local dir called {} that contains the training history data from
+            a previous training run.""".format(TRAINING_HIST_FILE))
+
+    return parser.parse_args()
+
 
 if __name__ == '__main__':
+    # Hyperameters are configured in global scope below
     epochs = 20
     correction_factor= 0.3
     batch_size = 128
+    #
+
     main(epochs, batch_size, correction_factor)
 
