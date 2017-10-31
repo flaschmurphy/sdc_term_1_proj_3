@@ -307,10 +307,7 @@ simulator in autonomous mode (i.e. produced overfitting effects).
 Below is a video of the car driving around the first track autonomously
 under the instruction of the fully trained model.
 
-<video width="864" height="448" controls>
-  <source src="./video_a.mp4" type="video/mp4">
-Your browser does not support the video tag.
-</video>
+[![Link to video](resources/9_video_a.png)](https://youtu.be/ld_03QTCGHU)
 
 
 

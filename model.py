@@ -246,14 +246,12 @@ def main(epochs, batch_size, correction_factor):
         print('Compiling and training model...')
         model.compile(optimizer='adam', loss='mse')
 
-        # The line below generate a TensorBoard callback that is then fed into
-        # the fit() method. The # result of this is that log data is collected
-        # during training which can be used to visualize # and if necessary
-        # debug the model training behavior. Unfortunately the project
-        # environment is # defaulted to Keras version 1.2.1 which is less
-        # feature-rich than the # newer v2 releases. Therefore there are some
-        # limitations to what # can be accomplished with this version of the
-        # callback.
+        # The line below generate a TensorBoard callback that is then fed into the fit()
+        # method. The result of this is that log data is collected during training which
+        # can be used to visualize and if necessary debug the model training behavior.
+        # Unfortunately the project environment is defaulted to Keras version 1.2.1 which
+        # is less feature-rich than the newer v2 releases. Therefore there are some
+        # limitations to what can be accomplished with this version of the callback.
         tboard = TensorBoard(log_dir='./tboard')
 
         history_object = model.fit_generator(\
