@@ -305,46 +305,13 @@ simulator in autonomous mode (i.e. produced overfitting effects).
 ### Is the car able to navigate correctly on test data?
 
 Below is a video of the car driving around the first track autonomously
-<<<<<<< dc95338ef6d659bad7b4b3fdd5ad8194e2e9ee2d
-under the instruction of the fully trained model (note - redirects to YouTube).
-=======
 under the instruction of the fully trained model *(note - redirects to YouTube)*.
->>>>>>> Final writeup before 1st submission
 
 [![Link to video](resources/9_video_a.png)](https://youtu.be/ld_03QTCGHU)
 
 
 ## Additional Suggestions -- Track Two
 
-<<<<<<< dc95338ef6d659bad7b4b3fdd5ad8194e2e9ee2d
-The model that I trained for track one worked amazingly well on track 2, with no
-modifications at all. The second track is a lot more complex as there are
-many more corners, they are sharper, the edges of the road look different,
-there are hills, etc. It was very encouraging therefore, to see that the model
-worked on all but one or two of the sections on the second track. Note that in
-the file drive.py, the speed is hard coded to 9mph in autonomous mode, which
-helps a lot on the hills in tracks 2.
-
-A simple approach would be to generate training data for the second track,
-simply add it to the training data for the first track, and retrain the
-original model. Interestingly when I tried this approach, despite trying
-various modifications to the hyperparameters, I found I was getting worse
-results than before! I therefore removed all the training data for the second
-track, **except** the images for the sections where the model was having
-difficulty. 
-
-A better way to enhance the model would be to save the features of the trained
-model from the first track, pass in new training data for the second track,
-then add a new dense block of layers to produce a final steering predictions. 
-In addition to this (or instead of), fine tuning could be used on one or more
-of the Conv layers from the original model to enhance the model for additional
-images from the second track. Unfortunately due to time constraints I was
-unable to complete this experiment.
-
-Nevertheless, below is a link to a video of how the model performed on track
-two. It's not visible in the video, but there was one or two sections where
-I had to manually intervene to keep the car on the track (note - redirects to YouTube).
-=======
 The model that I trained for track one worked amazingly well on track two, with
 no modifications at all. The second track is a lot more complex as there are
 many more corners, they are sharper, the edges of the road look different,
@@ -371,7 +338,6 @@ complete this experiment.
 Nevertheless, below is a link to a video of how the model performed on track
 two. It's not visible in the video, but there was one or two sections where
 I had to manually intervene to keep the car on the track *(note - redirects to YouTube)*.
->>>>>>> Final writeup before 1st submission
 
 [![Link to video](resources/9_video_b.png)](https://youtu.be/N8iegtEgEZk)
 
