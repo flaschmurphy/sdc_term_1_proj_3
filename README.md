@@ -8,8 +8,8 @@ __Date__: 27th Oct 2017
 
 The objective of this project is was to drive a car around a track inside the
 Udacity driving simulator to generate training data and to then use that data
-to trail a self-made neural network. The model would then be capable of driving
-the same car around the track autonomously. As an additional (optional)
+to train a neural network. The model should be capable of driving
+the car around the track autonomously. As an additional (optional)
 objective a second, more complex track was available to try out as well. 
 
 In the following sections I will cover each bullet in the rubic one by one.
